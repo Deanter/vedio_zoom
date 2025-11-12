@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import traceback
 from pathlib import Path
 from typing import List
 
@@ -21,6 +22,13 @@ app = Flask(__name__)
 
 TEMP_ROOT = Path(os.getenv("TEMP_DIR", "/tmp/video_api"))
 WHISPER_MODEL = os.getenv("WHISPER_MODEL", "whisper-1")
+
+# Проверка наличия API ключа
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    print("⚠️  WARNING: OPENAI_API_KEY not found in environment variables!")
+else:
+    print(f"✅ OPENAI_API_KEY loaded (length: {len(OPENAI_API_KEY)} chars)")
 
 
 @app.post("/analyze")
@@ -76,8 +84,12 @@ def analyze():
             transcription = transcribe_audio(audio_path, WHISPER_MODEL)
             print(f"[{trace_id}] ✅ Транскрибация завершена: {len(transcription.segments)} сегментов, язык: {transcription.language}")
         except TranscriptionError as exc:
+            print(f"[{trace_id}] ❌ TranscriptionError: {exc}")
+            traceback.print_exc()
             return _json_error(f"Ошибка транскрибации (Whisper API): {exc}", trace_id, status=500)
         except Exception as exc:
+            print(f"[{trace_id}] ❌ Unexpected error during transcription: {exc}")
+            traceback.print_exc()
             return _json_error(f"Неожиданная ошибка при транскрибации: {exc}", trace_id, status=500)
 
         # Этап 5: Формирование ответа
@@ -102,6 +114,8 @@ def analyze():
             print(f"[{trace_id}] ✅ Ответ сформирован успешно")
             return jsonify(response_model.model_dump(exclude_none=True))
         except Exception as exc:
+            print(f"[{trace_id}] ❌ Error forming response: {exc}")
+            traceback.print_exc()
             return _json_error(f"Ошибка формирования ответа: {exc}", trace_id, status=500)
     finally:
         # Выполняем очистку после обработки

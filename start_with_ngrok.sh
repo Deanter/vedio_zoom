@@ -19,10 +19,21 @@ if pgrep -x "ngrok" > /dev/null; then
     sleep 2
 fi
 
-# Запускаем Flask сервер в фоне
-echo "📡 Запуск Flask сервера на порту 8000..."
-python3 run.py &
-FLASK_PID=$!
+# Запускаем production сервер (gunicorn) в фоне для поддержки длинных транскрипций
+echo "📡 Запуск production сервера на порту 8000..."
+# Load environment variables
+if [ -f .env ]; then
+    export $(cat .env | grep -v '#' | xargs)
+    if [ -n "$OPENAI_API_KEY" ]; then
+        echo "✅ OPENAI_API_KEY загружен (длина: ${#OPENAI_API_KEY} символов)"
+    else
+        echo "⚠️  OPENAI_API_KEY не найден в .env!"
+    fi
+fi
+gunicorn --workers 2 --timeout 600 --graceful-timeout 600 --bind 0.0.0.0:8000 --daemon --pid gunicorn.pid "app.main:app"
+# Ждем создания PID файла
+sleep 2
+FLASK_PID=$(cat gunicorn.pid 2>/dev/null || echo "")
 
 # Ждем немного, чтобы сервер запустился
 sleep 3
@@ -72,7 +83,12 @@ echo ""
 cleanup() {
     echo ""
     echo "🛑 Остановка сервисов..."
-    kill $FLASK_PID $NGROK_PID 2>/dev/null
+    kill $NGROK_PID 2>/dev/null
+    if [ -f gunicorn.pid ]; then
+        kill $(cat gunicorn.pid) 2>/dev/null
+        rm -f gunicorn.pid
+    fi
+    pkill -f gunicorn 2>/dev/null
     echo "✅ Остановлено"
     exit 0
 }

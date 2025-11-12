@@ -20,7 +20,13 @@
 
 ## Запуск
 
-Рекомендуемый способ:
+Для production (рекомендуется для n8n):
+
+```bash
+./start_production.sh
+```
+
+Для разработки:
 
 ```bash
 python3 run.py
@@ -36,6 +42,8 @@ flask run --host=0.0.0.0 --port=8000
 # Через модуль Python
 python3 -m app.main
 ```
+
+**Важно:** Для интеграции с n8n используйте `start_production.sh`, чтобы избежать таймаутов при обработке длинных видео.
 
 ## API
 

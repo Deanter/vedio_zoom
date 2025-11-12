@@ -17,13 +17,18 @@ The service follows a sequential 5-stage pipeline (app/main.py:26-109):
 3. **Audio Extraction** (app/audio_extractor.py): Converts video to 16kHz mono WAV using ffmpeg
 4. **Metadata Normalization** (app/metadata_processor.py): Unifies metadata format across platforms
 5. **Transcription** (app/transcriber.py): Sends audio to Whisper API and formats response with timestamps
+   - Automatically splits audio files larger than 24 MB into chunks (app/audio_splitter.py)
+   - Transcribes each chunk separately and merges results with corrected timestamps
+   - Cleans up temporary chunk files after processing
 
 Each stage has its own custom exception type for granular error handling.
 
 ### Key Components
 
-- **app/main.py**: Flask application with single `/analyze` POST endpoint
+- **app/main.py**: Flask application with single `/analyze` POST endpoint (includes error logging with traceback)
 - **app/models.py**: Pydantic models for request/response validation (AnalyzeRequest, AnalyzeResponse, TimestampEntry)
+- **app/transcriber.py**: Whisper API integration with automatic large file handling
+- **app/audio_splitter.py**: Splits large audio files into manageable chunks for Whisper API
 - **app/utils.py**: Shared utilities (trace ID generation, timestamp formatting, file cleanup)
 
 ### Data Flow
@@ -59,13 +64,19 @@ ffmpeg -version
 ### Running the Service
 
 ```bash
-# Recommended way
+# Production mode (recommended for n8n integration)
+./start_production.sh
+# Uses gunicorn with 600s timeout for long transcriptions
+
+# Development mode
 python3 run.py
 
 # Alternative methods
 python3 -m app.main
 export FLASK_APP=app.main:app && flask run --host=0.0.0.0 --port=8000
 ```
+
+**Important for n8n users:** Use `start_production.sh` to avoid connection timeouts during long transcriptions.
 
 ### Testing
 
@@ -108,6 +119,28 @@ All error responses include a `trace_id` for debugging.
 - **YouTube**: Returns full description field
 - **TikTok/Instagram**: Description is omitted if empty (app/metadata_processor.py:24-26)
 - All platforms use yt-dlp with retry logic and format fallback (worst/best quality)
+
+## Audio File Size Handling
+
+The Whisper API has a 25 MB file size limit. The service automatically handles this:
+
+- Files under 24 MB: Sent directly to Whisper API
+- Files over 24 MB: Automatically split into 10-minute chunks using ffmpeg
+- Each chunk is transcribed separately
+- Results are merged with corrected timestamps to maintain continuity
+- Temporary chunk files are automatically cleaned up after processing
+
+This allows transcription of videos of any length without manual intervention.
+
+## Connection Timeouts and n8n Integration
+
+Long transcriptions (3-10 minutes) can cause HTTP connection timeouts. Solutions:
+
+1. **Use production server** (recommended): Run with `./start_production.sh` which uses gunicorn with 600s timeout
+2. **Increase client timeout**: In n8n HTTP Request node, set timeout to 600000ms (10 minutes)
+3. **Monitor progress**: Check server logs to see transcription progress while waiting
+
+The Flask development server (`python3 run.py`) has shorter timeouts and is only suitable for testing with short videos.
 
 ## Dependencies
 

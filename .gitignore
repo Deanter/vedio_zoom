@@ -16,3 +16,7 @@ pip-wheel-metadata/
 # Downloads and temp
 tmp/
 /tmp/
+
+# Process files
+gunicorn.pid
+*.pid
